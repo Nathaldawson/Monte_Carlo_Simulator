@@ -1,6 +1,6 @@
 # Browser-Based Monte Carlo Simulator
 
-This is a self-contained HTML file that runs a Monte Carlo simulation for stock prices directly in a web browser. It uses JavaScript for the financial calculations and Chart.js for real-time visualization. No backend server or special setup is required.
+This is a self-contained HTML file that runs a Monte Carlo simulation for stock/F&Os prices, directly in a web browser. It uses JavaScript for the financial calculations and Chart.js for real-time visualization. No backend server or special setup is required.
 
 ## Features
 
@@ -23,4 +23,5 @@ This is a self-contained HTML file that runs a Monte Carlo simulation for stock 
 * HTML
 * CSS (Embedded)
 * JavaScript (Embedded)
+
 * Chart.js (loaded from a CDN)
