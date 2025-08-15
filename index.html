@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>High-Performance Monte Carlo Simulator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --background-color: #0d1117;
+            --container-bg: #161b22;
+            --border-color: #30363d;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+            --accent-color: #b91091; /* Amber/Orange */
+            --button-primary-bg: #b91091;
+            --button-primary-hover: #b7399a;
+            --button-secondary-bg: #da3633;
+            --button-secondary-hover: #f85149;
+        }
+
+        body {
+            font-family: 'Roboto Mono', monospace;
+            background-color: var(--background-color);
+            color: var(--text-primary);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding-top: 20px;
+        }
+
+        h1, h2 {
+            color: var(--accent-color);
+            font-weight: 500;
+        }
+
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            width: 95%;
+            max-width: 1400px;
+        }
+
+        .controls {
+            flex: 1;
+            min-width: 280px;
+            background: var(--container-bg);
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            margin: 10px;
+            height: fit-content;
+        }
+
+        .controls h2 {
+            margin-top: 0;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+
+        .controls label {
+            display: block;
+            margin-top: 15px;
+            font-weight: 400;
+            color: var(--text-secondary);
+        }
+
+        .controls input {
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            box-sizing: border-box;
+            background-color: var(--background-color);
+            color: var(--text-primary);
+            font-family: 'Roboto Mono', monospace;
+        }
+
+        .controls button {
+            width: 100%;
+            padding: 10px;
+            margin-top: 20px;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            font-weight: 500;
+        }
+        
+        #startButton {
+            background-color: var(--button-primary-bg);
+        }
+        #startButton:hover:not(:disabled) {
+            background-color: var(--button-primary-hover);
+        }
+        #startButton:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        #clearButton {
+            background-color: var(--button-secondary-bg);
+        }
+        #clearButton:hover {
+            background-color: var(--button-secondary-hover);
+        }
+
+        .chart-container {
+            flex: 3;
+            min-width: 500px;
+            padding: 10px;
+            margin: 10px;
+            min-height: 60vh;
+        }
+    </style>
+</head>
+<body>
+    <h1>Monte Carlo Simulation</h1>
+    <div class="container">
+        <div class="controls">
+            <h2>Parameters</h2>
+            <label for="initialPrice">Initial Price (₹):</label>
+            <input type="number" id="initialPrice" value="100">
+
+            <label for="drift">Drift (%):</label>
+            <input type="number" id="drift" value="8">
+
+            <label for="volatility">Volatility (%):</label>
+            <input type="number" id="volatility" value="20">
+
+            <label for="days">Time Horizon (Days):</label>
+            <input type="number" id="days" value="252">
+
+            <label for="simulations">Number of Simulations:</label>
+            <input type="number" id="simulations" value="100">
+            
+            <label for="speed">Animation Speed (ms delay):</label>
+            <input type="range" id="speed" min="0" max="100" value="20">
+
+            <button id="startButton">Start Simulation</button>
+            <button id="clearButton">Clear / Stop</button>
+        </div>
+        <div class="chart-container">
+            <canvas id="simulationChart"></canvas>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- Global state to control simulation ---
+            let isSimulationRunning = false;
+            let cancelSimulation = false;
+            
+            // --- Chart Setup ---
+            const ctx = document.getElementById('simulationChart').getContext('2d');
+            const simulationChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: []
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 0 },
+                    plugins: {
+                        legend: { display: false },
+                        title: { 
+                            display: true, 
+                            text: 'Simulated Price Paths',
+                            color: '#c9d1d9'
+                        }
+                    },
+                    scales: {
+                        x: { 
+                            title: { display: true, text: 'Trading Days', color: '#8b949e' },
+                            ticks: { color: '#8b949e' },
+                            grid: { color: 'rgba(139, 148, 158, 0.2)' }
+                        },
+                        y: { 
+                            title: { display: true, text: 'Stock Price (₹)', color: '#8b949e' },
+                            ticks: { color: '#8b949e' },
+                            grid: { color: 'rgba(139, 148, 158, 0.2)' }
+                        }
+                    }
+                }
+            });
+
+            // --- Simulation Logic ---
+            function random_normal() {
+                let u = 0, v = 0;
+                while(u === 0) u = Math.random();
+                while(v === 0) v = Math.random();
+                return Math.sqrt( -2.0 * Math.log( u ) ) * Math.cos( 2.0 * Math.PI * v );
+            }
+
+            function generatePath(initialPrice, drift, volatility, days) {
+                const path = [initialPrice];
+                const dt = 1.0 / 252.0; 
+                for (let i = 1; i < days; i++) {
+                    const lastPrice = path[i - 1];
+                    const z = random_normal();
+                    const newPrice = lastPrice * Math.exp(
+                        (drift - 0.5 * Math.pow(volatility, 2)) * dt +
+                        volatility * Math.sqrt(dt) * z
+                    );
+                    path.push(newPrice);
+                }
+                return path;
+            }
+            
+            // --- UI Element Listeners ---
+            const startButton = document.getElementById('startButton');
+            const clearButton = document.getElementById('clearButton');
+            const inputs = document.querySelectorAll('.controls input');
+
+            const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+            async function runSimulation() {
+                if (!validateInputs()) {
+                    return;
+                }
+                
+                setUIState(true);
+
+                const params = {
+                    initialPrice: parseFloat(document.getElementById('initialPrice').value),
+                    drift: parseFloat(document.getElementById('drift').value) / 100,
+                    volatility: parseFloat(document.getElementById('volatility').value) / 100,
+                    simulations: parseInt(document.getElementById('simulations').value),
+                    days: parseInt(document.getElementById('days').value),
+                    speed: parseInt(document.getElementById('speed').value)
+                };
+
+                clearChart();
+                simulationChart.data.labels = Array.from({ length: params.days }, (_, i) => i);
+
+                for (let i = 0; i < params.simulations; i++) {
+                    if (cancelSimulation) {
+                        break; // Exit loop if cancelled
+                    }
+                    const path = generatePath(params.initialPrice, params.drift, params.volatility, params.days);
+                    addPathToChart(path);
+                    await sleep(params.speed);
+                }
+                
+                setUIState(false);
+            }
+
+            function validateInputs() {
+                const fields = ['initialPrice', 'drift', 'volatility', 'days', 'simulations'];
+                for (const id of fields) {
+                    const input = document.getElementById(id);
+                    const value = parseFloat(input.value);
+                    if (isNaN(value) || (id === 'initialPrice' && value <= 0) || (id === 'days' && value <= 1) || (id === 'simulations' && value <= 0)) {
+                        alert(`Please enter a valid, positive number for ${input.labels[0].textContent}`);
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            function setUIState(isRunning) {
+                isSimulationRunning = isRunning;
+                if (isRunning) {
+                    cancelSimulation = false;
+                    startButton.disabled = true;
+                    startButton.textContent = 'Simulation in Progress...';
+                    inputs.forEach(input => input.disabled = true);
+                } else {
+                    cancelSimulation = false;
+                    startButton.disabled = false;
+                    startButton.textContent = 'Start Simulation';
+                    inputs.forEach(input => input.disabled = false);
+                }
+            }
+            
+            startButton.addEventListener('click', runSimulation);
+
+            clearButton.addEventListener('click', () => {
+                if (isSimulationRunning) {
+                    cancelSimulation = true; // Signal the running loop to stop
+                }
+                clearChart();
+            });
+
+            // --- Chart Helper Functions ---
+            function getRandomColor() {
+                const hue = Math.floor(Math.random() * 360);
+                // Use HSL for vibrant, well-distributed colors with transparency
+                return `hsla(${hue}, 80%, 65%, 0.6)`;
+            }
+
+            function addPathToChart(path) {
+                const newDataset = {
+                    label: `Simulation ${simulationChart.data.datasets.length + 1}`,
+                    data: path,
+                    borderColor: getRandomColor(),
+                    borderWidth: 1.5,
+                    pointRadius: 0
+                };
+                simulationChart.data.datasets.push(newDataset);
+                simulationChart.update('none'); // Update without animation for performance
+            }
+
+            function clearChart() {
+                simulationChart.data.datasets = [];
+                simulationChart.data.labels = [];
+                simulationChart.update('none');
+            }
+        });
+    </script>
+</body>
+</html>
